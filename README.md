@@ -12,6 +12,16 @@ Caudal total = Caudal(esgoto) + Caudal(afluência direta) + Caudal(afluência in
 - **direta**: água da chuva que entra na rede residual;
 - **indireta**: água do lençol freático que entra por fissuras na tubulação.
 
+## Update — `marcos/improving-models`
+
+O que mudou no treino do estágio 04 face ao `main`.
+
+- **Horas que entram.** Um bloco de caudal ≤ 0 com 6 h ou mais é sensor parado e sai das médias. Zeros curtos também não entram na média; a hora só conta com pelo menos 15 leituras positivas e com zeros em menos de metade das leituras.
+- **Entradas.** Para cada hora que o modelo prevê, a chuva entra em duas colunas, só com o que já caiu. Às 14h, `chuva_3h` soma 11h, 12h e 13h; `chuva_6h` soma de 8h a 13h. A chuva das 14h fica de fora: o caudal dessa hora responde à água que já entrou na rede. No teste do Ameal de 31/08 a 02/09, a previsão com altura passou de R² 0,820 e erro 0,371 m³/h para R² 0,860 e erro 0,323 m³/h. O dia da semana saiu: com poucas semanas o modelo colava à chuvada da amostra, não à semana tipo.
+- **Três previsões no teste.** Com altura (altura + chuva + hora), só altura, e só chuva. A só chuva aprende a afluência (caudal − esgoto − indireta), com constantes calculadas só nos dias de treino; as que usam altura aprendem o caudal total.
+- **Corte.** Com os dias completos, o teste continua a ser os últimos 30 % dos dias (nunca menos de 2). Se mais de 30 % dos dias anteriores têm menos de 20 horas, o teste são os últimos 3 dias e o treino só os dias anteriores quase completos. A janela de dia seco fica a mais longa que tenha pelo menos uma madrugada com leituras, para o teste não fornecer a madrugada que faltava.
+- **d+5.** Deixa de ser o modelo só com chuva. É o caudal médio de cada hora do relógio na série já medida: no teste esse perfil erra menos.
+
 ## Estágios
 
 Um notebook por estágio, numerado pela ordem de execução. Cada um lê as saídas do anterior em `data/interim/`.
@@ -113,14 +123,15 @@ Dois `HistGradientBoostingRegressor` que preveem o caudal total da hora:
 
 | Modelo | Entradas | Para quê |
 |---|---|---|
-| Nowcast | altura + chuva + relógio | o caudal de agora, quando há altura medida |
-| Previsão | chuva + relógio | os 5 dias à frente, em que ainda não há altura |
+| Previsão (com altura) | altura + chuva + relógio | o caudal de agora, quando há altura medida |
+| Previsão (só altura) | só altura | o mesmo, para ver o que a chuva acrescenta |
+| Previsão (só chuva) | chuva + relógio | os 5 dias à frente, em que ainda não há altura |
 
 Os parâmetros saem de uma grelha pequena (`PARAM_GRID`) com validação cruzada temporal de 3 folds, cortada por dia, só nos dias de treino.
 
 ### Teste
 
-Os últimos 30 % dos dias (nunca menos de 2) ficam de fora do treino. Compara-se o nowcast, a previsão e uma base sem modelo (o caudal médio de cada hora do relógio no treino), com erro médio absoluto e R² no caudal total e na afluência direta.
+Os últimos 30 % dos dias (nunca menos de 2) ficam de fora do treino. Compara-se as previsões (com altura, só altura, só chuva) e uma base sem modelo (o caudal médio de cada hora do relógio no treino), com erro médio absoluto e R² no caudal total e na afluência direta.
 
 ### Previsão d+5
 
@@ -131,7 +142,7 @@ O modelo de previsão, treinado com todas as horas, aplicado aos 5 dias a seguir
 | Ficheiro | Conteúdo |
 |---|---|
 | `<estação>_previsao_d5.csv` | uma linha por hora: chuva, caudal total previsto, esgoto, indireta e direta (m³/h) |
-| `04_previsao_<estação>.html` | chuva, caudal total e afluência direta: o teste à esquerda (medido, nowcast, previsão, base), o d+5 à direita |
+| `04_previsao_<estação>.html` | chuva, caudal total e afluência direta: o teste à esquerda (medido, previsões, base), o d+5 à direita |
 | `04_curva_vazao_<estação>.html` | curva de vazão: leituras de 2 min, médias horárias e o ajuste `Q = a · h^b` |
 
 O notebook imprime ainda um resumo por estação: constantes, parâmetros escolhidos, erros e R² do teste e volumes diários do d+5.
@@ -159,4 +170,4 @@ O 03 é opcional para a previsão: o 04 só precisa do 01 e do 02.
 - Desde julho de 2026 há poucos dias secos, sobretudo no Ameal; as constantes de esgoto e indireta assentam em poucas madrugadas.
 - No Ameal há uma falha do sensor de velocidade de 13 a 21 de agosto de 2026 (caudal zero com altura normal); essas leituras saem pelo filtro de caudal acima de zero.
 - O d+5 usa a chuva que caiu. Com a previsão meteorológica real o erro é maior.
-- A altura só entra no nowcast. Dentro dos 5 dias nada corrige a previsão além da chuva.
+- A altura só entra nas previsões (com altura) e (só altura). Dentro dos 5 dias nada corrige a previsão além da chuva.
