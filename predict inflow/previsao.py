@@ -58,7 +58,17 @@ MIN_HORAS_DIA = 20
 
 
 def load_flow(estacao: str) -> pd.DataFrame:
-    """Leituras de 2 min do caudalímetro, com os filtros do treino.
+    """Leituras de 2 min do caudalímetro (estágio 01), com os filtros do treino."""
+    frame = pd.read_csv(
+        INTERIM_DIR / f"{estacao}_merged.csv",
+        usecols=["datetime", "caudal_l_s", "caudal_m3_h", "altura_m"],
+        parse_dates=["datetime"],
+    )
+    return prepare_flow(frame, estacao)
+
+
+def prepare_flow(frame: pd.DataFrame, estacao: str) -> pd.DataFrame:
+    """Os filtros do treino sobre leituras de 2 min de qualquer origem.
 
     - `0 < altura_m < diâmetro`: altura 0 é sensor sem nível; altura igual ou
       acima do diâmetro é conduta em carga, deixa de ser enchimento.
@@ -67,13 +77,7 @@ def load_flow(estacao: str) -> pd.DataFrame:
       limiar não está a registar escoamento), mas a hora só conta se os zeros
       não forem a maior parte dela.
     """
-    station = STATIONS[estacao]
-    diameter = float(station["collector_diameter_m"])
-    frame = pd.read_csv(
-        INTERIM_DIR / f"{estacao}_merged.csv",
-        usecols=["datetime", "caudal_l_s", "caudal_m3_h", "altura_m"],
-        parse_dates=["datetime"],
-    )
+    diameter = float(STATIONS[estacao]["collector_diameter_m"])
     frame = frame.dropna(subset=["datetime", "caudal_m3_h", "altura_m"])
     frame = frame[frame["datetime"] >= INICIO]
     frame = frame[(frame["altura_m"] > 0) & (frame["altura_m"] < diameter)]
